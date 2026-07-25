@@ -267,10 +267,13 @@ with tab2:
         
         # Precio Tachado (Más grande y centrado bajo el listón)
         texto_original_str = f"${precio_original_txt}"
-        w_tachado = draw.textlength(texto_original_str, font=fuente_precios_tachado)
+        
+        # --- AQUÍ ESTÁ LA CORRECCIÓN: usamos fuente_tachado ---
+        w_tachado = draw.textlength(texto_original_str, font=fuente_tachado)
+        
         # Sombra sutil y texto
-        draw.text((ancho//2+2, precio_orig_y+2), texto_original_str, fill=(0, 0, 0, 150), font=fuente_precios_tachado, anchor="mm")
-        draw.text((ancho//2, precio_orig_y), texto_original_str, fill=(255, 255, 255), font=fuente_precios_tachado, anchor="mm")
+        draw.text((ancho//2+2, precio_orig_y+2), texto_original_str, fill=(0, 0, 0, 150), font=fuente_tachado, anchor="mm")
+        draw.text((ancho//2, precio_orig_y), texto_original_str, fill=(255, 255, 255), font=fuente_tachado, anchor="mm")
         draw.line([(ancho//2 - w_tachado//2 - 15, precio_orig_y), (ancho//2 + w_tachado//2 + 15, precio_orig_y)], fill=(255, 0, 0), width=10)
         
         # Precio Oferta (Verde Neón Gigante)
@@ -279,7 +282,7 @@ with tab2:
         draw.text((ancho//2 + 8, precio_final_y + 8), texto_oferta_str, fill=(0, 60, 0, 200), font=fuente_precios, anchor="mm")
         # Color principal verde fosforescente (#80FF00 / RGB 128,255,0)
         draw.text((ancho//2, precio_final_y), texto_oferta_str, fill=(128, 255, 0), font=fuente_precios, anchor="mm", stroke_width=3, stroke_fill=(0, 100, 0))
-
+        
         # Renderizar
         buffered = BytesIO()
         banner_base.save(buffered, format="PNG")
