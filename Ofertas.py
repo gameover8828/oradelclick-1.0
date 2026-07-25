@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide",
 )
 
-# --- INICIALIZAR ESTADO DE SESIÓN (Para poder limpiar los datos) ---
+# --- INICIALIZAR ESTADO DE SESIÓN ---
 keys_texto = ["prod_name", "prod_price", "prod_link", "prod_orig_price", "desc_txt"]
 for key in keys_texto:
     if key not in st.session_state:
@@ -25,29 +25,27 @@ if "reset_uploader" not in st.session_state:
     st.session_state.reset_uploader = 0
 
 def limpiar_datos():
-    """Función para limpiar todos los inputs de la aplicación"""
     for k in keys_texto:
         st.session_state[k] = ""
     st.session_state.prod_cat = "General / Cualquiera"
-    st.session_state.reset_uploader += 1 # Resetea el cargador de imágenes
+    st.session_state.reset_uploader += 1 
 
-# --- FUNCIONES DE UTILIDAD (Banner Original) ---
+# --- FUNCIONES DE UTILIDAD (Banner Avanzado) ---
 @st.cache_resource  
 def cargar_fuentes():
     try:
-        font_path = "fuente_oferta.ttf"
-        font_principal = ImageFont.truetype(font_path, 180) if os.path.exists(font_path) else ImageFont.truetype("arialbd.ttf", 150)
+        # Se recomiendan fuentes gruesas para mejor impacto
+        font_principal = ImageFont.truetype("arialbd.ttf", 220) # Para el descuento
         font_general = ImageFont.truetype("arial.ttf", 50)   
-        font_precios = ImageFont.truetype("arialbd.ttf", 100)
-        font_precios_tachado = ImageFont.truetype("arialbd.ttf", 60)
-        font_titulo = ImageFont.truetype("arialbd.ttf", 85)
+        font_precios = ImageFont.truetype("arialbd.ttf", 160) # Precio final más grande
+        font_precios_tachado = ImageFont.truetype("arialbd.ttf", 80)
+        font_titulo = ImageFont.truetype("arialbd.ttf", 90)
         return font_principal, font_general, font_precios, font_precios_tachado, font_titulo
     except:
         font_defecto = ImageFont.load_default()
         return font_defecto, font_defecto, font_defecto, font_defecto, font_defecto
 
 def draw_scalloped_badge(draw, cx, cy, r_outer, r_inner, points, fill, outline, width):
-    """Dibuja un sello con bordes ondulados (scalloped)"""
     poly = []
     for i in range(points * 2):
         angle = i * math.pi / points
@@ -57,29 +55,45 @@ def draw_scalloped_badge(draw, cx, cy, r_outer, r_inner, points, fill, outline, 
     poly.append(poly[0])
     draw.line(poly, fill=outline, width=width, joint="curve")
 
-def draw_torn_ribbon(draw, x, y, width, height, fill, outline_color, outline_width=0, zigzags=6, tilt=0):
-    """Dibuja un listón con bordes rasgados"""
-    points = []
-    points.append((x, y))
-    points.append((x + width, y - 50))
-    y_step = height / zigzags
+def crear_liston_inclinado(ancho, alto, texto, fuente):
+    """Crea una imagen de un listón rasgado con texto, lista para rotar"""
+    # Creamos un lienzo transparente suficientemente grande
+    img_liston = Image.new("RGBA", (ancho + 200, alto + 100), (0,0,0,0))
+    d = ImageDraw.Draw(img_liston)
+    
+    x, y, w, h = 50, 50, ancho, alto
+    zigzags = 6
+    
+    # Dibujar la forma rasgada (Capa Sombra/Fondo Naranja Oscuro)
+    puntos_sombra = [(x-10, y+20), (x+w+10, y-30)]
+    y_step = h / zigzags
     for i in range(1, zigzags + 1):
         x_offset = random.randint(-15, 15) if i < zigzags else 0
-        points.append((x + width + x_offset, y - 50 + (i * y_step)))
-    points.append((x, y + height))
+        puntos_sombra.append((x+w+10 + x_offset, y-30 + (i * y_step)))
+    puntos_sombra.append((x-10, y+h+20))
     for i in range(zigzags - 1, 0, -1):
         x_offset = random.randint(-15, 15)
-        points.append((x + x_offset, y + (i * y_step)))
+        puntos_sombra.append((x-10 + x_offset, y+20 + (i * y_step)))
+    d.polygon(puntos_sombra, fill=(230, 80, 0, 255)) # Sombra
 
-    if outline_width > 0:
-        draw.polygon(points, fill=outline_color)
-        inner_points = [(px, py + outline_width) if i in [0, 1] else (px, py - outline_width) for i, (px, py) in enumerate(points)]
-        draw.polygon(points, fill=fill) 
-    else:
-        draw.polygon(points, fill=fill)
+    # Dibujar la forma rasgada (Capa Principal Naranja/Roja)
+    puntos = [(x, y), (x+w, y-50)]
+    for i in range(1, zigzags + 1):
+        x_offset = random.randint(-15, 15) if i < zigzags else 0
+        puntos.append((x+w + x_offset, y-50 + (i * y_step)))
+    puntos.append((x, y+h))
+    for i in range(zigzags - 1, 0, -1):
+        x_offset = random.randint(-15, 15)
+        puntos.append((x + x_offset, y + (i * y_step)))
+    d.polygon(puntos, fill=(255, 50, 0, 255)) # Rojo vibrante
+    
+    # Dibujar texto en el listón
+    texto_mostrar = texto if texto else "¡OFERTA!"
+    d.text((x + w//2, y + h//2 - 20), texto_mostrar, fill=(255, 235, 0), font=fuente, anchor="mm", stroke_width=4, stroke_fill=(180, 0, 0))
+    
+    return img_liston
 
 def create_sale_tag():
-    """Crea una etiqueta de 'sale' como una imagen rotada"""
     tag = Image.new("RGBA", (200, 80), (0,0,0,0))
     d = ImageDraw.Draw(tag)
     d.polygon([(40, 10), (190, 10), (190, 70), (40, 70), (10, 40)], fill=(255, 85, 50, 255))
@@ -92,8 +106,7 @@ def create_sale_tag():
     return tag
 
 # --- INTERFAZ PRINCIPAL ---
-st.title("🛒 Generador Profesional de Ofertas y Diseños")
-st.write("Escribe los datos una vez, y generaremos tu diseño y tus textos en conjunto.")
+st.title("🛒 Generador de Ofertas Pro (Estilo Impacto)")
 
 # ==========================================
 # 1. DATOS GLOBALES COMPARTIDOS
@@ -102,16 +115,13 @@ st.header("1. Datos Generales del Producto")
 
 col1, col2, col3, col4 = st.columns([3, 2, 3, 2])
 with col1:
-    producto = st.text_input("Nombre del Producto", placeholder="Ej. Kit La Roche-Posay", key="prod_name")
+    producto = st.text_input("Nombre del Producto", placeholder="Ej. Smart TV 55", key="prod_name")
 with col2:
-    precio = st.text_input("Precio de Oferta", placeholder="Ej. 1125", key="prod_price")
+    precio = st.text_input("Precio de Oferta", placeholder="Ej. 10999", key="prod_price")
 with col3:
     lista_categorias = [
-        "General / Cualquiera", "Vehículos y Accesorios", "Supermercado y Alimentos", 
-        "Tecnología y Electrónica", "Videojuegos y Consolas", "Electrodomésticos",
-        "Hogar y Muebles", "Moda", "Joyería y Relojes", "Deportes y Fitness", 
-        "Herramientas y Construcción", "Mascotas", "Bebés y Juguetes", 
-        "Salud y Belleza", "Libros y Música", "Instrumentos Musicales", "Papelería y Arte"
+        "General / Cualquiera", "Tecnología y Electrónica", "Hogar y Muebles", 
+        "Moda", "Vehículos y Accesorios", "Salud y Belleza"
     ]
     categoria = st.selectbox("Categoría:", lista_categorias, key="prod_cat")
 with col4:
@@ -134,91 +144,56 @@ with tab1:
         estilo = st.selectbox("Estilo del mensaje:", ["Llamativo", "Corto y directo", "Urgencia"])
 
     if producto and precio and link_ml:
-        if categoria == "Vehículos y Accesorios":
-            emoji_cat, frase_cat, frase_urgencia = "🚗🔧", f"¡Equipa tu vehículo con este excelente {producto}!", "¡No dejes pasar esta oportunidad para tu auto o moto!"
-        elif categoria == "Supermercado y Alimentos":
-            emoji_cat, frase_cat, frase_urgencia = "🛒🍎", f"¡Aprovecha y llévate {producto} al mejor precio!", "¡Llena tu despensa antes de que se agote!"
-        elif categoria == "Tecnología y Electrónica":
-            emoji_cat, frase_cat, frase_urgencia = "⚡📱", f"¡Llegó la hora de actualizarte! Llévate este {producto}.", "¡Pocas unidades disponibles de esta joya tecnológica!"
-        elif categoria == "Videojuegos y Consolas":
-            emoji_cat, frase_cat, frase_urgencia = "🎮🕹️", f"¡Lleva tu entretenimiento al siguiente nivel con este {producto}!", "¡Sube de nivel antes de que se agoten las unidades!"
-        elif categoria == "Electrodomésticos":
-            emoji_cat, frase_cat, frase_urgencia = "🧊🍳", f"¡Facilita tu día a día con este increíble {producto}!", "¡Equipa tu casa al mejor precio ahora mismo!"
-        elif categoria == "Hogar y Muebles":
-            emoji_cat, frase_cat, frase_urgencia = "🏡🛋️", f"Dale un toque especial a tu casa con este {producto}.", "¡Mejora tu hogar hoy mismo antes de que se acaben!"
-        elif categoria == "Moda":
-            emoji_cat, frase_cat, frase_urgencia = "👟👗", f"¡Renueva tu outfit con este increíble {producto}! Luce espectacular.", "¡Últimas tallas y modelos en inventario!"
-        elif categoria == "Joyería y Relojes":
-            emoji_cat, frase_cat, frase_urgencia = "💍⌚", f"¡Luce increíble y a la moda con este hermoso {producto}!", "¡Un detalle perfecto que se está agotando muy rápido!"
-        elif categoria == "Deportes y Fitness":
-            emoji_cat, frase_cat, frase_urgencia = "🏋️‍♂️⚽", f"¡Ponte en forma y da tu máximo con este {producto}!", "¡Equípate antes de que suba de precio!"
-        elif categoria == "Herramientas y Construcción":
-            emoji_cat, frase_cat, frase_urgencia = "🛠️🏗️", f"¡Haz tus proyectos realidad con la mejor calidad! Increíble {producto}.", "¡Herramientas indispensables a un precio irrepetible!"
-        elif categoria == "Mascotas":
-            emoji_cat, frase_cat, frase_urgencia = "🐶🐱", f"¡Consiente a tu mejor amigo peludo con este {producto}!", "¡Lo mejor para tu mascota a un clic, últimas piezas!"
-        elif categoria == "Bebés y Juguetes":
-            emoji_cat, frase_cat, frase_urgencia = "👶🧸", f"¡Diversión y cuidado garantizado con este {producto}!", "¡Consíguelo antes de que vuele!"
-        elif categoria == "Salud y Belleza":
-            emoji_cat, frase_cat, frase_urgencia = "✨💄", f"Consiéntete como te mereces. Este {producto} es justo lo que necesitas.", "¡Cuida de ti al mejor precio antes de que se agote!"
-        elif categoria == "Libros y Música":
-            emoji_cat, frase_cat, frase_urgencia = "📚🎶", f"¡Sumérgete en una gran historia o melodía con {producto}!", "¡Añádelo a tu colección hoy mismo!"
-        elif categoria == "Instrumentos Musicales":
-            emoji_cat, frase_cat, frase_urgencia = "🎸🎹", f"¡Saca el artista que llevas dentro con este {producto}!", "¡No dejes que la música pare, últimas piezas!"
-        elif categoria == "Papelería y Arte":
-            emoji_cat, frase_cat, frase_urgencia = "✏️🎨", f"¡Despierta tu creatividad con este {producto}!", "¡Materiales increíbles a un precio que no volverá!"
-        else: 
-            emoji_cat, frase_cat, frase_urgencia = "🎁🛍️", f"¡Checa este productazo! El {producto} que estabas buscando.", "¡Corre porque vuelan las piezas!"
-
-        if estilo == "Llamativo":
-            mensaje_default = f"🔥 ¡GRAN OFERTA DE NO CREER! 🔥\n\n{emoji_cat} {frase_cat}\n\n💰 Precio especial: solo $ {precio}. 😱\n\n👉 Cómpralo de forma segura en MercadoLibre aquí: \n{link_ml} \n\n#Ofertas #MercadoLibre #Imperdible"
-        elif estilo == "Corto y directo":
-            mensaje_default = f"✅ {emoji_cat} {producto} disponible por solo ${precio}.\n\n🛒 Cómpralo aquí directo en MercadoLibre: {link_ml}"
-        else: 
-            mensaje_default = f"🚨 ¡ÚLTIMAS PIEZAS DISPONIBLES! 🚨\n\n{producto} súper rebajado a solo ${precio}. 😱\n\n⚠️ {frase_urgencia}\n\n🛒 Haz tu pedido AQUÍ antes de que se acabe: {link_ml}"
+        emoji_cat = "⚡🛍️"
+        frase_cat = f"¡No dejes pasar esta oportunidad! El {producto} que buscabas."
         
-        mensaje_final = st.text_area("Edita el texto final si deseas agregar o quitar algo:", value=mensaje_default, height=200)
-        mensaje_codificado = urllib.parse.quote(mensaje_final)
-        st.link_button("Enviar por WhatsApp", f"https://wa.me/?text={mensaje_codificado}", type="primary")
+        if estilo == "Llamativo":
+            mensaje_default = f"🔥 ¡OFERTA RELÁMPAGO! 🔥\n\n{emoji_cat} {frase_cat}\n\n💰 Llevátelo por solo $ {precio} MXN. 😱\n\n👉 Cómpralo de forma segura aquí: \n{link_ml}"
+        elif estilo == "Corto y directo":
+            mensaje_default = f"✅ {producto} en oferta por ${precio}.\n\n🛒 Compra aquí: {link_ml}"
+        else: 
+            mensaje_default = f"🚨 ¡ÚLTIMAS PIEZAS! 🚨\n\n{producto} rebajado a ${precio}. 😱\n\n🛒 Pídelo AQUÍ antes de que se acabe: {link_ml}"
+        
+        mensaje_final = st.text_area("Edita tu texto:", value=mensaje_default, height=200)
+        st.link_button("Enviar por WhatsApp", f"https://wa.me/?text={urllib.parse.quote(mensaje_final)}", type="primary")
     else:
-        st.info("Por favor, introduce el nombre del producto, precio y link arriba para generar los textos.")
+        st.info("Introduce Nombre, Precio y Link para generar el texto.")
 
-# --- PESTAÑA 2: BANNER ORIGINAL ---
+# --- PESTAÑA 2: BANNER IMPACTO ---
 with tab2:
     col_b1, col_b2 = st.columns(2)
     with col_b1:
-        porcentaje_desc_txt = st.text_input("Texto del Descuento", value="¡25% OFF!", key="desc_txt")
-        precio_original_txt = st.text_input("Precio Original Tachado", placeholder="Ej. 1500", key="prod_orig_price")
+        porcentaje_desc_txt = st.text_input("Texto del Descuento", value="¡29% OFF!", key="desc_txt")
+        precio_original_txt = st.text_input("Precio Original Tachado", placeholder="Ej. 15599", key="prod_orig_price")
     with col_b2:
         imagen_subida = st.file_uploader(
-            "Sube la foto de tu producto (PNG transparente recomendado)",
+            "Sube la foto de tu producto",
             type=["png", "jpg", "jpeg"],
             key=f"uploader_{st.session_state.reset_uploader}"
         )
 
-    # El sistema se activa usando el precio global y la imagen subida
     if imagen_subida and precio and precio_original_txt:
-        st.subheader("🖼️ Vista Previa del Banner Generado")
+        st.subheader("🖼️ Banner Generado")
 
         ancho, alto = 1080, 1920 
         
-        # 1. Fondo Base Degradado más suave
-        banner_base = Image.new("RGBA", (ancho, alto), (128, 186, 230, 255))
+        # 1. Fondo Degradado Azul Intenso
+        banner_base = Image.new("RGBA", (ancho, alto), (90, 155, 215, 255))
         draw = ImageDraw.Draw(banner_base)
         
-        # Brillo central (Radial)
+        # Brillo central más claro para resaltar el producto
         for i in range(255, 0, -5):
-            radio = 800 + (255 - i) * 2
-            color_borde = (190, 230, 255, int(i * 0.15))
-            draw.ellipse([(ancho//2 - radio, alto//2 - radio - 200), (ancho//2 + radio, alto//2 + radio - 200)], fill=color_borde)
+            radio = 850 + (255 - i) * 2
+            color_borde = (160, 210, 255, int(i * 0.1))
+            draw.ellipse([(ancho//2 - radio, alto//2 - radio - 100), (ancho//2 + radio, alto//2 + radio - 100)], fill=color_borde)
         
-        # 2. Confeti Mejorado (Polígonos rotados)
+        # 2. Confeti
         colores_confeti = [(255, 70, 70), (255, 215, 0), (70, 150, 255), (255, 255, 255)]
-        for _ in range(120):
+        for _ in range(150):
             x = random.randint(0, ancho)
             y = random.randint(0, alto)
-            tam = random.randint(10, 25)
+            tam = random.randint(15, 30)
             color = random.choice(colores_confeti)
-            
             angle = random.uniform(0, math.pi)
             p1 = (x, y)
             p2 = (x + tam * math.cos(angle), y + tam * math.sin(angle))
@@ -226,82 +201,90 @@ with tab2:
             p4 = (x - (tam/2) * math.sin(angle), y + (tam/2) * math.cos(angle))
             draw.polygon([p1, p2, p3, p4], fill=color)
 
-        # 3. Rayos Eléctricos y Texto Superior
         fuente_script, fuente_sec, fuente_precios, fuente_tachado, font_titulo = cargar_fuentes()
         
-        # Sombras y Texto "OFERTA RELÁMPAGO"
-        texto_oferta = " OFERTA RELÁMPAGO "
-        draw.text((ancho//2 + 5, 155), texto_oferta, fill=(0, 0, 0, 80), font=font_titulo, anchor="mm") 
+        # 3. Texto Superior con Rayos y Resplandor Cian
+        texto_oferta = "⚡ OFERTA RELÁMPAGO ⚡"
+        # Efecto resplandor (sombra gruesa cian)
+        draw.text((ancho//2, 155), texto_oferta, fill=(0, 200, 255, 100), font=font_titulo, anchor="mm", stroke_width=10, stroke_fill=(0, 200, 255)) 
+        # Texto principal blanco
         draw.text((ancho//2, 150), texto_oferta, fill=(255, 255, 255), font=font_titulo, anchor="mm", stroke_width=2, stroke_fill=(255, 255, 255))
 
-        # 4. Sello "MÁS VENDIDO"
-        pos_sello_x, pos_sello_y = 820, 480
-        draw_scalloped_badge(draw, pos_sello_x+10, pos_sello_y+10, 170, 150, 16, (0,0,0,50), (0,0,0,0), 0)
-        draw_scalloped_badge(draw, pos_sello_x, pos_sello_y, 170, 150, 16, (148, 230, 255, 255), (255, 255, 255, 255), 12)
-        draw.ellipse([(pos_sello_x - 120, pos_sello_y - 120), (pos_sello_x + 120, pos_sello_y + 120)], outline=(255, 255, 255, 255), width=5)
-        
-        try:
-            font_sello = ImageFont.truetype("arialbd.ttf", 60)
-        except:
-            font_sello = fuente_sec
-        draw.text((pos_sello_x, pos_sello_y - 35), "MÁS", fill=(72, 155, 230), font=font_sello, anchor="mm")
-        draw.text((pos_sello_x, pos_sello_y + 35), "VENDIDO", fill=(72, 155, 230), font=font_sello, anchor="mm")
-
-        # 5. Etiquetas de 'Sale'
-        tag_img = create_sale_tag()
-        banner_base.paste(tag_img.rotate(25, expand=True), (250, 320), tag_img.rotate(25, expand=True))
-        banner_base.paste(tag_img.rotate(-20, expand=True), (750, 1250), tag_img.rotate(-20, expand=True))
-
-        # 6. Imagen del producto
+        # 4. Imagen del producto (Al centro)
         img_prod = Image.open(imagen_subida).convert("RGBA")
         w_orig, h_orig = img_prod.size
-        nuevo_alto = 750
+        nuevo_alto = 800
         nuevo_ancho = int((nuevo_alto / h_orig) * w_orig)
-        if nuevo_ancho > ancho * 0.85:
-            nuevo_ancho = int(ancho * 0.85)
+        if nuevo_ancho > ancho * 0.90:
+            nuevo_ancho = int(ancho * 0.90)
             nuevo_alto = int((nuevo_ancho / w_orig) * h_orig)
             
         img_prod = img_prod.resize((nuevo_ancho, nuevo_alto), Image.Resampling.LANCZOS)
         pos_prod_x = (ancho - nuevo_ancho) // 2
-        pos_prod_y = 600 
+        pos_prod_y = 500 
         
         # Sombra del producto
         sombra_prod = Image.new("RGBA", (nuevo_ancho, nuevo_alto), (0,0,0,0))
         sombra_draw = ImageDraw.Draw(sombra_prod)
-        sombra_draw.ellipse([(50, nuevo_alto-80), (nuevo_ancho-50, nuevo_alto+20)], fill=(0,0,0,100))
-        sombra_prod = sombra_prod.filter(ImageFilter.GaussianBlur(15))
+        sombra_draw.ellipse([(50, nuevo_alto-100), (nuevo_ancho-50, nuevo_alto+30)], fill=(0,0,0,150))
+        sombra_prod = sombra_prod.filter(ImageFilter.GaussianBlur(25))
         banner_base.paste(sombra_prod, (pos_prod_x, pos_prod_y), sombra_prod)
-        
         banner_base.paste(img_prod, (pos_prod_x, pos_prod_y), img_prod)
 
-        # 7. Listón de Descuento
-        cinta_x, cinta_y_base, cinta_w, cinta_h = 100, 1380, 880, 250
-        draw_torn_ribbon(draw, cinta_x - 10, cinta_y_base + 10, cinta_w + 40, cinta_h, fill=(255, 215, 0, 255), outline_color=(0,0,0,0))
-        draw_torn_ribbon(draw, cinta_x, cinta_y_base, cinta_w, cinta_h, fill=(255, 60, 0, 255), outline_color=(0,0,0,0))
-
-        draw.text((ancho//2 + 8, cinta_y_base + 118), porcentaje_desc_txt, fill=(180, 0, 0), font=fuente_script, anchor="mm")
-        draw.text((ancho//2, cinta_y_base + 110), porcentaje_desc_txt, fill=(255, 235, 0), font=fuente_script, anchor="mm")
-
-        # 8. Precios
-        precio_orig_y = 1720
-        precio_final_y = 1820
+        # 5. Sello "MÁS VENDIDO" (Estilo Neón Cian sobre el producto)
+        pos_sello_x, pos_sello_y = 850, 450
+        # Círculos y ondas resplandecientes
+        draw_scalloped_badge(draw, pos_sello_x, pos_sello_y, 180, 160, 16, (10, 40, 80, 220), (0, 255, 255, 255), 15) # Borde Cian
+        draw_scalloped_badge(draw, pos_sello_x, pos_sello_y, 160, 140, 16, (0,0,0,0), (100, 255, 255, 200), 5) # Borde interior delgado
         
-        # Precio Tachado
+        try:
+            font_sello = ImageFont.truetype("arialbd.ttf", 60)
+            font_sello_peq = ImageFont.truetype("arialbd.ttf", 40)
+        except:
+            font_sello = fuente_sec
+            font_sello_peq = fuente_sec
+            
+        draw.text((pos_sello_x, pos_sello_y - 25), "MÁS", fill=(0, 255, 255), font=font_sello, anchor="mm")
+        draw.text((pos_sello_x, pos_sello_y + 35), "VENDIDO", fill=(255, 255, 255), font=font_sello_peq, anchor="mm")
+
+        # 6. Etiquetas 'sale' flotantes
+        tag_img = create_sale_tag()
+        banner_base.paste(tag_img.rotate(35, expand=True), (280, 280), tag_img.rotate(35, expand=True))
+        banner_base.paste(tag_img.rotate(-20, expand=True), (750, 1300), tag_img.rotate(-20, expand=True))
+
+        # 7. Listón Inclinado (¡29% OFF!)
+        liston = crear_liston_inclinado(950, 320, porcentaje_desc_txt, fuente_script)
+        liston_rotado = liston.rotate(12, expand=True) # Lo inclinamos 12 grados hacia arriba
+        
+        # Posicionar el listón rotado sobre la parte baja del producto
+        pos_liston_x = (ancho - liston_rotado.width) // 2
+        pos_liston_y = 1000
+        banner_base.paste(liston_rotado, (pos_liston_x, pos_liston_y), liston_rotado)
+
+        # 8. PRECIOS (Abajo)
+        precio_orig_y = 1550
+        precio_final_y = 1750
+        
+        # Precio Tachado (Más grande y centrado bajo el listón)
         texto_original_str = f"${precio_original_txt}"
-        w_tachado = draw.textlength(texto_original_str, font=fuente_tachado)
-        draw.text((ancho//2, precio_orig_y), texto_original_str, fill=(255, 255, 255), font=fuente_tachado, anchor="mm")
-        draw.line([(ancho//2 - w_tachado//2 - 10, precio_orig_y), (ancho//2 + w_tachado//2 + 10, precio_orig_y)], fill=(220, 20, 20), width=8)
+        w_tachado = draw.textlength(texto_original_str, font=fuente_precios_tachado)
+        # Sombra sutil y texto
+        draw.text((ancho//2+2, precio_orig_y+2), texto_original_str, fill=(0, 0, 0, 150), font=fuente_precios_tachado, anchor="mm")
+        draw.text((ancho//2, precio_orig_y), texto_original_str, fill=(255, 255, 255), font=fuente_precios_tachado, anchor="mm")
+        draw.line([(ancho//2 - w_tachado//2 - 15, precio_orig_y), (ancho//2 + w_tachado//2 + 15, precio_orig_y)], fill=(255, 0, 0), width=10)
         
-        # Precio Oferta (Con sombra oscura)
+        # Precio Oferta (Verde Neón Gigante)
         texto_oferta_str = f"${precio} MXN"
-        draw.text((ancho//2 + 5, precio_final_y + 5), texto_oferta_str, fill=(0, 50, 0, 150), font=fuente_precios, anchor="mm")
-        draw.text((ancho//2, precio_final_y), texto_oferta_str, fill=(100, 255, 0), font=fuente_precios, anchor="mm", stroke_width=2, stroke_fill=(20, 100, 0))
+        # Contorno oscuro/sombra para crear contraste
+        draw.text((ancho//2 + 8, precio_final_y + 8), texto_oferta_str, fill=(0, 60, 0, 200), font=fuente_precios, anchor="mm")
+        # Color principal verde fosforescente (#80FF00 / RGB 128,255,0)
+        draw.text((ancho//2, precio_final_y), texto_oferta_str, fill=(128, 255, 0), font=fuente_precios, anchor="mm", stroke_width=3, stroke_fill=(0, 100, 0))
 
-        # Guardar y mostrar
+        # Renderizar
         buffered = BytesIO()
         banner_base.save(buffered, format="PNG")
         
-        st.image(buffered.getvalue(), caption="Diseño Profesional Generado", use_container_width=True)
+        st.image(buffered.getvalue(), caption="Diseño Estilo Impacto Generado", use_container_width=True)
 
         st.download_button(
             label="📥 Descargar Imagen Publicitaria Completa",
@@ -311,4 +294,4 @@ with tab2:
         )
 
     else:
-        st.info("👆 Sube la imagen de tu producto y define los precios para generar el diseño.")
+        st.info("👆 Sube la imagen y define los precios originales para generar el diseño.")
