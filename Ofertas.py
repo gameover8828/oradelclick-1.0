@@ -1,5 +1,4 @@
 import streamlit as st
-import urllib.parse
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from io import BytesIO
 import os
@@ -8,239 +7,237 @@ import random
 
 # --- CONFIGURACIÓN DE LA PÁGINA ---
 st.set_page_config(
-    page_title="Generador de Ofertas Pro",
+    page_title="Ora del Click - Generador de Ofertas Pro",
     page_icon="🛒",
     layout="wide",
 )
-
-# --- INICIALIZAR ESTADO DE SESIÓN ---
-keys_texto = ["prod_name", "prod_price", "prod_link", "prod_orig_price", "desc_txt"]
-for key in keys_texto:
-    if key not in st.session_state:
-        st.session_state[key] = ""
-
-if "prod_cat" not in st.session_state:
-    st.session_state.prod_cat = "General / Cualquiera"
-if "reset_uploader" not in st.session_state:
-    st.session_state.reset_uploader = 0
-
-def limpiar_datos():
-    for k in keys_texto:
-        st.session_state[k] = ""
-    st.session_state.prod_cat = "General / Cualquiera"
-    st.session_state.reset_uploader += 1 
 
 # --- FUNCIONES DE UTILIDAD ---
 @st.cache_resource  
 def cargar_fuentes():
     try:
-        font_principal = ImageFont.truetype("arialbd.ttf", 90) # Tamaño controlado para el listón
+        font_path = "fuente_oferta.ttf"
+        font_principal = ImageFont.truetype(font_path, 180) if os.path.exists(font_path) else ImageFont.truetype("arialbd.ttf", 150)
         font_general = ImageFont.truetype("arial.ttf", 50)   
-        font_precios = ImageFont.truetype("arialbd.ttf", 100) 
-        font_tachado = ImageFont.truetype("arialbd.ttf", 50)
-        font_titulo = ImageFont.truetype("arialbd.ttf", 75)
-        return font_principal, font_general, font_precios, font_tachado, font_titulo
+        font_precios = ImageFont.truetype("arialbd.ttf", 100)
+        font_precios_tachado = ImageFont.truetype("arialbd.ttf", 60)
+        font_titulo = ImageFont.truetype("arialbd.ttf", 85)
+        return font_principal, font_general, font_precios, font_precios_tachado, font_titulo
     except:
+        st.warning("⚠️ Fuentes no encontradas. Usando fuentes por defecto. Te recomendamos tener arial.ttf y arialbd.ttf en tu sistema.")
         font_defecto = ImageFont.load_default()
         return font_defecto, font_defecto, font_defecto, font_defecto, font_defecto
 
 def draw_scalloped_badge(draw, cx, cy, r_outer, r_inner, points, fill, outline, width):
+    """Dibuja un sello con bordes ondulados (scalloped)"""
     poly = []
     for i in range(points * 2):
         angle = i * math.pi / points
         r = r_outer if i % 2 == 0 else r_inner
         poly.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+    
+    # Truco para borde grueso en polígonos: dibujar varias veces o usar una línea sobre el borde
     draw.polygon(poly, fill=fill)
-    poly.append(poly[0])
-    if width > 0:
-        draw.line(poly, fill=outline, width=width, joint="curve")
+    poly.append(poly[0]) # Cerrar el trazo
+    draw.line(poly, fill=outline, width=width, joint="curve")
 
-def crear_liston_inclinado(ancho, alto, texto, fuente):
-    """Crea un listón con proporciones exactas y limpias"""
-    img_liston = Image.new("RGBA", (ancho, alto), (0,0,0,0))
-    d = ImageDraw.Draw(img_liston)
+def draw_torn_ribbon(draw, x, y, width, height, fill, outline_color, outline_width=0, zigzags=6, tilt=0):
+    """Dibuja un listón con bordes rasgados"""
+    # Puntos base
+    points = []
     
-    x, y, w, h = 20, 20, ancho - 40, alto - 40
-    zigzags = 6
+    # Borde superior
+    points.append((x, y))
+    points.append((x + width, y - 50)) # Inclinación ligera
     
-    # Capa Sombra (Amarillo)
-    puntos_sombra = [(x-5, y+10), (x+w+5, y-10)]
-    y_step = h / zigzags
+    # Borde derecho rasgado (zig-zag)
+    y_step = height / zigzags
     for i in range(1, zigzags + 1):
-        x_offset = random.randint(-8, 8) if i < zigzags else 0
-        puntos_sombra.append((x+w+5 + x_offset, y-10 + (i * y_step)))
-    puntos_sombra.append((x-5, y+h+10))
+        x_offset = random.randint(-15, 15) if i < zigzags else 0
+        points.append((x + width + x_offset, y - 50 + (i * y_step)))
+        
+    # Borde inferior
+    points.append((x, y + height))
+    
+    # Borde izquierdo rasgado (zig-zag)
     for i in range(zigzags - 1, 0, -1):
-        x_offset = random.randint(-8, 8)
-        puntos_sombra.append((x-5 + x_offset, y+10 + (i * y_step)))
-    d.polygon(puntos_sombra, fill=(255, 200, 0, 255)) 
+        x_offset = random.randint(-15, 15)
+        points.append((x + x_offset, y + (i * y_step)))
 
-    # Capa Principal (Rojo)
-    puntos = [(x, y), (x+w, y-25)]
-    for i in range(1, zigzags + 1):
-        x_offset = random.randint(-8, 8) if i < zigzags else 0
-        puntos.append((x+w + x_offset, y-25 + (i * y_step)))
-    puntos.append((x, y+h))
-    for i in range(zigzags - 1, 0, -1):
-        x_offset = random.randint(-8, 8)
-        puntos.append((x + x_offset, y + (i * y_step)))
-    d.polygon(puntos, fill=(255, 50, 0, 255)) 
-    
-    texto_mostrar = texto if texto else "¡OFERTA!"
-    d.text((ancho//2, alto//2 - 5), texto_mostrar, fill=(255, 235, 0), font=fuente, anchor="mm", stroke_width=3, stroke_fill=(180, 0, 0))
-    return img_liston
+    if outline_width > 0:
+        # Dibujar borde "sombra/resalte" desplazado o como contorno
+        draw.polygon(points, fill=outline_color)
+        
+        # Reducir un poco el tamaño para el polígono interior
+        inner_points = [(px, py + outline_width) if i in [0, 1] else (px, py - outline_width) for i, (px, py) in enumerate(points)]
+        draw.polygon(points, fill=fill) # Simplificado para evitar cálculos complejos de contracción
+    else:
+        draw.polygon(points, fill=fill)
 
 def create_sale_tag():
-    tag = Image.new("RGBA", (160, 70), (0,0,0,0))
+    """Crea una etiqueta de 'sale' como una imagen rotada"""
+    tag = Image.new("RGBA", (200, 80), (0,0,0,0))
     d = ImageDraw.Draw(tag)
-    d.polygon([(30, 10), (150, 10), (150, 60), (30, 60), (10, 35)], fill=(255, 85, 50, 255))
-    d.ellipse([(15, 30), (23, 40)], fill=(255, 255, 255, 255))
+    # Fondo naranja de la etiqueta
+    d.polygon([(40, 10), (190, 10), (190, 70), (40, 70), (10, 40)], fill=(255, 85, 50, 255))
+    # Agujero de la etiqueta
+    d.ellipse([(20, 35), (30, 45)], fill=(255, 255, 255, 255))
+    # Texto
     try:
-        f = ImageFont.truetype("arialbd.ttf", 35)
+        f = ImageFont.truetype("arialbd.ttf", 40)
     except:
         f = ImageFont.load_default()
-    d.text((90, 35), "sale", fill=(255, 255, 255, 255), font=f, anchor="mm")
+    d.text((115, 40), "sale", fill=(255, 255, 255, 255), font=f, anchor="mm")
     return tag
 
-# --- INTERFAZ PRINCIPAL ---
-st.title("🛒 Generador de Ofertas Pro")
+# --- SECCIÓN 1: DATOS DEL BANNER ---
+st.title("🛒 Generador Profesional de Ofertas y Diseños")
+st.write("Personaliza tu banner para redes sociales basado en el diseño profesional de ejemplo.")
 
-st.header("1. Datos Generales del Producto")
-col1, col2, col3, col4 = st.columns([3, 2, 3, 2])
+col1, col2 = st.columns(2)
+
 with col1:
-    producto = st.text_input("Nombre del Producto", placeholder="Ej. Smart TV 55", key="prod_name")
+    producto_nombre = st.text_input("Nombre del Producto", value="Kit La Roche-Posay")
+    precio_oferta_txt = st.text_input("Precio de Oferta", value="1,125")
+    porcentaje_desc_txt = st.text_input("Texto del Descuento", value="¡25% OFF!")
+
 with col2:
-    precio = st.text_input("Precio de Oferta", placeholder="Ej. 1125", key="prod_price")
-with col3:
-    lista_categorias = ["General / Cualquiera", "Tecnología y Electrónica", "Hogar y Muebles", "Moda"]
-    categoria = st.selectbox("Categoría:", lista_categorias, key="prod_cat")
-with col4:
-    st.write("") 
-    st.button("🧹 Limpiar Todo", on_click=limpiar_datos, type="primary", use_container_width=True)
+    precio_original_txt = st.text_input("Precio Original Tachado", value="1,500")
+    categoria = st.selectbox("Categoría:", ["Salud y Belleza", "Tecnología", "Moda"])
+    imagen_subida = st.file_uploader(
+        "Sube la foto de tu producto (PNG transparente recomendado)",
+        type=["png", "jpg", "jpeg"],
+    )
 
 st.divider()
 
-tab1, tab2 = st.tabs(["💬 Mensaje para WhatsApp", "🖼️ Generador de Banner"])
+# --- SECCIÓN 2: RENDERIZADO VISUAL DEL BANNER ---
+if imagen_subida and precio_oferta_txt and precio_original_txt:
+    st.subheader("🖼️ Vista Previa del Banner Generado")
 
-with tab1:
-    col_w1, col_w2 = st.columns(2)
-    with col_w1:
-        link_ml = st.text_input("Link", placeholder="https://...", key="prod_link")
-    with col_w2:
-        estilo = st.selectbox("Estilo del mensaje:", ["Llamativo", "Corto y directo", "Urgencia"])
-
-    if producto and precio and link_ml:
-        mensaje_default = f"🔥 ¡OFERTA RELÁMPAGO! 🔥\n\n¡No dejes pasar esta oportunidad! El {producto} que buscabas.\n\n💰 Llevátelo por solo $ {precio} MXN. 😱\n\n👉 Cómpralo de forma segura aquí: \n{link_ml}"
-        mensaje_final = st.text_area("Edita tu texto:", value=mensaje_default, height=200)
-        st.link_button("Enviar por WhatsApp", f"https://wa.me/?text={urllib.parse.quote(mensaje_final)}", type="primary")
-    else:
-        st.info("Introduce Nombre, Precio y Link para generar el texto.")
-
-with tab2:
-    col_b1, col_b2 = st.columns(2)
-    with col_b1:
-        porcentaje_desc_txt = st.text_input("Texto del Descuento", value="¡25% OFF!", key="desc_txt")
-        precio_original_txt = st.text_input("Precio Original Tachado", placeholder="Ej. 1500", key="prod_orig_price")
-    with col_b2:
-        imagen_subida = st.file_uploader("Sube la foto de tu producto", type=["png", "jpg", "jpeg"], key=f"uploader_{st.session_state.reset_uploader}")
-
-    if imagen_subida and precio and precio_original_txt:
-        st.subheader("🖼️ Banner Generado")
-
-        ancho, alto = 1080, 1920 
+    ancho, alto = 1080, 1920 
+    
+    # 1. Fondo Base Degradado más suave
+    banner_base = Image.new("RGBA", (ancho, alto), (128, 186, 230, 255))
+    draw = ImageDraw.Draw(banner_base)
+    
+    # Brillo central (Radial)
+    for i in range(255, 0, -5):
+        radio = 800 + (255 - i) * 2
+        color_borde = (190, 230, 255, int(i * 0.15))
+        draw.ellipse([(ancho//2 - radio, alto//2 - radio - 200), (ancho//2 + radio, alto//2 + radio - 200)], fill=color_borde)
+    
+    # 2. Confeti Mejorado (Polígonos rotados en lugar de rectángulos fijos)
+    colores_confeti = [(255, 70, 70), (255, 215, 0), (70, 150, 255), (255, 255, 255)]
+    for _ in range(120):
+        x = random.randint(0, ancho)
+        y = random.randint(0, alto)
+        tam = random.randint(10, 25)
+        color = random.choice(colores_confeti)
         
-        # 1. FONDO BLANCO LIMPIO
-        banner_base = Image.new("RGBA", (ancho, alto), (255, 255, 255, 255))
-        draw = ImageDraw.Draw(banner_base)
+        # Generar rectángulo rotado simulando confeti
+        angle = random.uniform(0, math.pi)
+        p1 = (x, y)
+        p2 = (x + tam * math.cos(angle), y + tam * math.sin(angle))
+        p3 = (x + tam * math.cos(angle) - (tam/2) * math.sin(angle), y + tam * math.sin(angle) + (tam/2) * math.cos(angle))
+        p4 = (x - (tam/2) * math.sin(angle), y + (tam/2) * math.cos(angle))
+        draw.polygon([p1, p2, p3, p4], fill=color)
+
+    # 3. Rayos Eléctricos y Texto Superior
+    fuente_script, fuente_sec, fuente_precios, fuente_tachado, font_titulo = cargar_fuentes()
+    
+    # Sombras y Texto "OFERTA RELÁMPAGO"
+    texto_oferta = " OFERTA RELÁMPAGO "
+    draw.text((ancho//2 + 5, 155), texto_oferta, fill=(0, 0, 0, 80), font=font_titulo, anchor="mm") # Sombra
+    draw.text((ancho//2, 150), texto_oferta, fill=(255, 255, 255), font=font_titulo, anchor="mm", stroke_width=2, stroke_fill=(255, 255, 255))
+
+    # 4. Sello "MÁS VENDIDO" (Ondulado / Scalloped)
+    pos_sello_x, pos_sello_y = 820, 480
+    # Sombra
+    draw_scalloped_badge(draw, pos_sello_x+10, pos_sello_y+10, 170, 150, 16, (0,0,0,50), (0,0,0,0), 0)
+    # Fondo Sello
+    draw_scalloped_badge(draw, pos_sello_x, pos_sello_y, 170, 150, 16, (148, 230, 255, 255), (255, 255, 255, 255), 12)
+    # Círculo interior
+    draw.ellipse([(pos_sello_x - 120, pos_sello_y - 120), (pos_sello_x + 120, pos_sello_y + 120)], outline=(255, 255, 255, 255), width=5)
+    
+    try:
+        font_sello = ImageFont.truetype("arialbd.ttf", 60)
+    except:
+        font_sello = fuente_sec
+    draw.text((pos_sello_x, pos_sello_y - 35), "MÁS", fill=(72, 155, 230), font=font_sello, anchor="mm")
+    draw.text((pos_sello_x, pos_sello_y + 35), "VENDIDO", fill=(72, 155, 230), font=font_sello, anchor="mm")
+
+    # 5. Etiquetas de 'Sale'
+    tag_img = create_sale_tag()
+    banner_base.paste(tag_img.rotate(25, expand=True), (250, 320), tag_img.rotate(25, expand=True))
+    banner_base.paste(tag_img.rotate(-20, expand=True), (750, 1250), tag_img.rotate(-20, expand=True))
+
+    # 6. Imagen del producto
+    img_prod = Image.open(imagen_subida).convert("RGBA")
+    w_orig, h_orig = img_prod.size
+    nuevo_alto = 750
+    nuevo_ancho = int((nuevo_alto / h_orig) * w_orig)
+    if nuevo_ancho > ancho * 0.85:
+        nuevo_ancho = int(ancho * 0.85)
+        nuevo_alto = int((nuevo_ancho / w_orig) * h_orig)
         
-        # 2. Confeti controlado
-        colores_confeti = [(255, 70, 70), (255, 215, 0), (70, 150, 255)]
-        for _ in range(100):
-            x = random.randint(50, ancho-50)
-            y = random.randint(50, alto-50)
-            tam = random.randint(12, 22)
-            color = random.choice(colores_confeti)
-            angle = random.uniform(0, math.pi)
-            p1 = (x, y)
-            p2 = (x + tam * math.cos(angle), y + tam * math.sin(angle))
-            p3 = (x + tam * math.cos(angle) - (tam/2) * math.sin(angle), y + tam * math.sin(angle) + (tam/2) * math.cos(angle))
-            p4 = (x - (tam/2) * math.sin(angle), y + (tam/2) * math.cos(angle))
-            draw.polygon([p1, p2, p3, p4], fill=color)
+    img_prod = img_prod.resize((nuevo_ancho, nuevo_alto), Image.Resampling.LANCZOS)
+    pos_prod_x = (ancho - nuevo_ancho) // 2
+    pos_prod_y = 600 
+    
+    # Sombra del producto
+    sombra_prod = Image.new("RGBA", (nuevo_ancho, nuevo_alto), (0,0,0,0))
+    sombra_draw = ImageDraw.Draw(sombra_prod)
+    sombra_draw.ellipse([(50, nuevo_alto-80), (nuevo_ancho-50, nuevo_alto+20)], fill=(0,0,0,100))
+    sombra_prod = sombra_prod.filter(ImageFilter.GaussianBlur(15))
+    banner_base.paste(sombra_prod, (pos_prod_x, pos_prod_y), sombra_prod)
+    
+    # Pegar Producto
+    banner_base.paste(img_prod, (pos_prod_x, pos_prod_y), img_prod)
 
-        fuente_script, fuente_sec, fuente_precios, fuente_tachado, font_titulo = cargar_fuentes()
-        
-        # 3. Título Superior
-        texto_oferta = "OFERTA RELÁMPAGO"
-        draw.text((ancho//2 + 3, 103), texto_oferta, fill=(210, 210, 210, 255), font=font_titulo, anchor="mm")
-        draw.text((ancho//2, 100), texto_oferta, fill=(50, 50, 50), font=font_titulo, anchor="mm", stroke_width=2, stroke_fill=(200, 200, 200))
+    # 7. Listón de Descuento (Estilo Papel Rasgado)
+    cinta_x, cinta_y_base, cinta_w, cinta_h = 100, 1380, 880, 250
+    
+    # Fondo Amarillo del listón
+    draw_torn_ribbon(draw, cinta_x - 10, cinta_y_base + 10, cinta_w + 40, cinta_h, fill=(255, 215, 0, 255), outline_color=(0,0,0,0))
+    # Frente Rojo del listón
+    draw_torn_ribbon(draw, cinta_x, cinta_y_base, cinta_w, cinta_h, fill=(255, 60, 0, 255), outline_color=(0,0,0,0))
 
-        # 4. Imagen del producto (Centrada y bien proporcionada)
-        img_prod = Image.open(imagen_subida).convert("RGBA")
-        w_orig, h_orig = img_prod.size
-        nuevo_alto = 700
-        nuevo_ancho = int((nuevo_alto / h_orig) * w_orig)
-        if nuevo_ancho > ancho * 0.75:
-            nuevo_ancho = int(ancho * 0.75)
-            nuevo_alto = int((nuevo_ancho / w_orig) * h_orig)
-            
-        img_prod = img_prod.resize((nuevo_ancho, nuevo_alto), Image.Resampling.LANCZOS)
-        pos_prod_x = (ancho - nuevo_ancho) // 2
-        pos_prod_y = 350 
-        
-        # Sombra suave para el producto
-        sombra_prod = Image.new("RGBA", (nuevo_ancho, nuevo_alto), (0,0,0,0))
-        sombra_draw = ImageDraw.Draw(sombra_prod)
-        sombra_draw.ellipse([(40, nuevo_alto-50), (nuevo_ancho-40, nuevo_alto+15)], fill=(0,0,0,70))
-        sombra_prod = sombra_prod.filter(ImageFilter.GaussianBlur(15))
-        banner_base.paste(sombra_prod, (pos_prod_x, pos_prod_y), sombra_prod)
-        banner_base.paste(img_prod, (pos_prod_x, pos_prod_y), img_prod)
+    # Texto del Descuento
+    # Sombra del texto
+    draw.text((ancho//2 + 8, cinta_y_base + 118), porcentaje_desc_txt, fill=(180, 0, 0), font=fuente_script, anchor="mm")
+    # Texto principal
+    draw.text((ancho//2, cinta_y_base + 110), porcentaje_desc_txt, fill=(255, 235, 0), font=fuente_script, anchor="mm")
 
-        # 5. Sello "MÁS VENDIDO"
-        pos_sello_x, pos_sello_y = 780, 260
-        draw_scalloped_badge(draw, pos_sello_x+6, pos_sello_y+6, 140, 125, 16, (230, 230, 230, 255), (0,0,0,0), 0) 
-        draw_scalloped_badge(draw, pos_sello_x, pos_sello_y, 140, 125, 16, (148, 230, 255, 255), (255, 255, 255, 255), 8)
-        draw.ellipse([(pos_sello_x - 100, pos_sello_y - 100), (pos_sello_x + 100, pos_sello_y + 100)], outline=(255, 255, 255, 255), width=4)
-        
-        try:
-            font_s = ImageFont.truetype("arialbd.ttf", 45)
-            font_sp = ImageFont.truetype("arialbd.ttf", 30)
-        except:
-            font_s, font_sp = fuente_sec, fuente_sec
-            
-        draw.text((pos_sello_x, pos_sello_y - 20), "MÁS", fill=(72, 155, 230), font=font_s, anchor="mm")
-        draw.text((pos_sello_x, pos_sello_y + 25), "VENDIDO", fill=(72, 155, 230), font=font_sp, anchor="mm")
+    # 8. Precios
+    precio_orig_y = 1720
+    precio_final_y = 1820
+    
+    # Precio Tachado
+    texto_original_str = f"${precio_original_txt}"
+    w_tachado = draw.textlength(texto_original_str, font=fuente_tachado)
+    draw.text((ancho//2, precio_orig_y), texto_original_str, fill=(255, 255, 255), font=fuente_tachado, anchor="mm")
+    draw.line([(ancho//2 - w_tachado//2 - 10, precio_orig_y), (ancho//2 + w_tachado//2 + 10, precio_orig_y)], fill=(220, 20, 20), width=8)
+    
+    # Precio Oferta (Con sombra oscura)
+    texto_oferta_str = f"${precio_oferta_txt} MXN"
+    # Sombra
+    draw.text((ancho//2 + 5, precio_final_y + 5), texto_oferta_str, fill=(0, 50, 0, 150), font=fuente_precios, anchor="mm")
+    # Texto
+    draw.text((ancho//2, precio_final_y), texto_oferta_str, fill=(100, 255, 0), font=fuente_precios, anchor="mm", stroke_width=2, stroke_fill=(20, 100, 0))
 
-        # 6. Etiqueta 'sale'
-        tag_img = create_sale_tag()
-        banner_base.paste(tag_img.rotate(25, expand=True), (220, 220), tag_img.rotate(25, expand=True))
+    # Guardar y mostrar
+    buffered = BytesIO()
+    banner_base.save(buffered, format="PNG")
+    
+    st.image(buffered.getvalue(), caption="Diseño Profesional Generado", use_container_width=True)
 
-        # 7. Listón Inclinado (Tamaño y ángulo correctos)
-        liston = crear_liston_inclinado(800, 200, porcentaje_desc_txt, fuente_script)
-        liston_rotado = liston.rotate(6, expand=True) 
-        pos_liston_x = (ancho - liston_rotado.width) // 2
-        pos_liston_y = 1050
-        banner_base.paste(liston_rotado, (pos_liston_x, pos_liston_y), liston_rotado)
+    st.download_button(
+        label="📥 Descargar Imagen Publicitaria Completa",
+        data=buffered.getvalue(),
+        file_name=f"banner_pro_{producto_nombre.replace(' ', '_')}.png",
+        mime="image/png",
+    )
 
-        # 8. PRECIOS (Ubicados ordenadamente abajo)
-        precio_orig_y = 1380
-        precio_final_y = 1520
-        
-        # Precio Tachado
-        texto_original_str = f"${precio_original_txt}"
-        w_tachado = draw.textlength(texto_original_str, font=fuente_tachado)
-        draw.text((ancho//2, precio_orig_y), texto_original_str, fill=(120, 120, 120), font=fuente_tachado, anchor="mm")
-        draw.line([(ancho//2 - w_tachado//2 - 10, precio_orig_y), (ancho//2 + w_tachado//2 + 10, precio_orig_y)], fill=(255, 0, 0), width=6)
-        
-        # Precio Oferta (Verde brillante)
-        texto_oferta_str = f"${precio} MXN"
-        draw.text((ancho//2 + 3, precio_final_y + 3), texto_oferta_str, fill=(0, 80, 0, 120), font=fuente_precios, anchor="mm")
-        draw.text((ancho//2, precio_final_y), texto_oferta_str, fill=(100, 230, 0), font=fuente_precios, anchor="mm", stroke_width=2, stroke_fill=(30, 130, 30))
-
-        buffered = BytesIO()
-        banner_base.save(buffered, format="PNG")
-        
-        st.image(buffered.getvalue(), caption="Diseño Correcto Generado", use_container_width=True)
-        st.download_button(label="📥 Descargar Imagen Completa", data=buffered.getvalue(), file_name=f"banner_pro_{producto.replace(' ', '_')}.png", mime="image/png")
-
-    else:
-        st.info("👆 Sube la imagen y define los precios para generar el diseño.")
+else:
+    st.info("👆 Sube la imagen de tu producto y define los precios para generar el diseño.")
