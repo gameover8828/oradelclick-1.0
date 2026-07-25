@@ -244,6 +244,3 @@ with tab2:
 
     else:
         st.info("👆 Sube la imagen y define los precios para generar el diseño.")
-
-    else:
-        st.info("👆 Sube la imagen y define los precios para generar el diseño.")
